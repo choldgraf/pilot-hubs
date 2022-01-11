@@ -9,10 +9,12 @@ This script helps remind our team when it's time to merge a PR. It does these th
 from ghapi.all import GhApi
 import pandas as pd
 from datetime import datetime
+from os import environ
 
 api = GhApi()
 
 open_prs = api.pulls.list("2i2c-org", "infrastructure", state="open")
+is_dispatch = environ["event_name"] == "workflow_dispatch"
 
 msg = ""
 for pr in open_prs:
@@ -26,15 +28,19 @@ for pr in open_prs:
         today = pd.to_datetime(datetime.today()).tz_localize("US/Pacific")
         review_time = pd.to_datetime(review["submitted_at"]).astimezone("US/Pacific")
         n_workdays = len(pd.bdate_range(review_time.date(), today.date()))
-        if n_workdays > 2:
+        if n_workdays > 2 or is_dispatch:
             msg += f"- [{pr['title']}]({pr['html_url']}) - {n_workdays} workdays old."
 if msg:
+    if is_dispatch:
+        msg = "DISPATCH TEST\n---\n" + msg
     msg = (
-        "**The following PRs are more than 24 hours old, have approval, and should be merged!**\n\n"
+        "**The following PRs have approvals over 2 days, and should be merged!**\n\n"
         + msg
     )
     # Print to output in a way that will store as an environment variable
-    print("Found PRs with old approvals, sending Slack message")
+    print("Found PRs with old approvals, sending the following Slack message:")
+    print(f"{msg}")
+    print("===")
     print(f"::set-output name=PRS_MESSAGE::{msg}")
     print(f"::set-output name=DO_SEND_MESSAGE::TRUE")
 else:
